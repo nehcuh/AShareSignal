@@ -1,0 +1,42 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Data and cache files
+data/
+output/
+*.pkl
+*.csv
+*.parquet
+
+# Memory and temporary files
+memory/
+*.log
+
+# Claude Code specific
+.claude/
+
+# VibeSOP specific (optional - keep if you want to share config)
+# .vibe/
+
+# Model files
+models/
+*.model
+*.joblib
+*.h5

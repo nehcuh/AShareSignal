@@ -1,0 +1,12 @@
+[project]
+name = "asharesignal"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "akshare>=1.18.46",
+    "openpyxl>=3.1.5",
+    "pytdx>=1.72",
+    "scikit-learn>=1.8.0",
+    "tushare>=1.4.25",
+]
