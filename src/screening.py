@@ -12,39 +12,8 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-TUSHARE_TOKEN = "fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60"
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
-
-_trading_days_cache = None
-
-
-def get_trading_days(start_date: str, end_date: str) -> List[str]:
-    """获取交易日列表（带缓存）"""
-    global _trading_days_cache
-    if _trading_days_cache is None:
-        cal = pro.trade_cal(exchange="SSE", start_date=start_date, end_date=end_date)
-        _trading_days_cache = sorted(cal[cal["is_open"] == 1]["cal_date"].tolist())
-    return _trading_days_cache
-
-
-def get_prev_trading_day(trade_date: str, trading_days: List[str]) -> Optional[str]:
-    """获取前一个交易日"""
-    for i, d in enumerate(trading_days):
-        if d == trade_date and i > 0:
-            return trading_days[i - 1]
-    for d in reversed(trading_days):
-        if d < trade_date:
-            return d
-    return None
-
-
-def load_stock_pool(excel_path: str) -> pd.DataFrame:
-    """加载股票池Excel文件"""
-    df = pd.read_excel(excel_path)
-    df["pool_date"] = pd.to_datetime(df["pool_date"])
-    df["stock_list"] = df["pool_data"].str.split(",")
-    return df
+from config import pro
+from utils.common import get_trading_days, load_stock_pool, get_prev_trading_day
 
 
 def get_daily_data(

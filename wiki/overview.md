@@ -163,9 +163,13 @@ AShareSignal/
 
 ## 7. 已知技术债
 
-1. **Token 硬编码** — 至少 6 个文件中硬编码了 Tushare Token
-2. **重复代码** — `is_main_board()`, `is_st_stock()`, `load_stock_pool()`, `get_trading_days()` 等函数在多个文件中重复定义
-3. **日期映射不一致** — 股票池日期处理逻辑不统一（有的 +3 个月，有的直接使用）
-4. **缺乏统一配置** — 没有集中的配置管理
+### 已修复（2026-04-15）
+1. ~~**Token 硬编码**~~ — 已统一改为环境变量 `TUSHARE_TOKEN`，`.env.example` 已提供
+2. ~~**重复代码**~~ — `is_main_board()`、`is_st_stock()`、`get_trading_days()` 已提取到 `src/utils/common.py`；`load_stock_pool()` 已统一并支持日期偏移参数
+4. ~~**缺乏统一配置**~~ — 已建立 `src/config.py` 集中管理路径、数据源优先级、策略参数
+
+### 待修复
+3. **日期映射不一致** — 股票池日期处理逻辑不统一（有的 +3 个月，有的直接使用）。已通过 `load_stock_pool(add_real_date=, date_offset_months=)` 参数化，但调用点仍需统一评审
 5. **main.py 占位** — 项目入口文件仅有 `print("Hello from asharesignal!")`
 6. **无测试代码** — 缺少单元测试
+7. **出场规则未闭环** — 尚未建立完整 exit strategy

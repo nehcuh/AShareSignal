@@ -1,6 +1,9 @@
-def main():
-    print("Hello from asharesignal!")
+#!/usr/bin/env python3
+"""
+AShareSignal CLI 入口
+"""
 
+from cli import main
 
 if __name__ == "__main__":
     main()

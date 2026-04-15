@@ -15,45 +15,7 @@ import akshare as ak
 
 sys.path.append(str(Path(__file__).parent))
 
-
-def is_main_board(ts_code: str) -> bool:
-    """
-    判断是否为主板股票
-    主板：000XXX、002XXX、001XXX（深圳），600XXX、601XXX、603XXX、605XXX（上海）
-    排除：688XXX（科创板）、300XXX、301XXX（创业板）、8XXXXX、430XXX（北交所）
-    """
-    code = ts_code.split('.')[0]
-
-    # 科创板
-    if code.startswith('688'):
-        return False
-
-    # 创业板
-    if code.startswith('300') or code.startswith('301'):
-        return False
-
-    # 北交所
-    if code.startswith('8') or code.startswith('430'):
-        return False
-
-    # 主板代码
-    # 深圳主板：000, 001, 002, 003
-    # 上海主板：600, 601, 603, 605
-    if (code.startswith('000') or code.startswith('001') or
-        code.startswith('002') or code.startswith('003') or
-        code.startswith('600') or code.startswith('601') or
-        code.startswith('603') or code.startswith('605')):
-        return True
-
-    return False
-
-
-def is_st_stock(name: str) -> bool:
-    """判断是否为ST股票"""
-    if not name:
-        return False
-    name = str(name).upper()
-    return 'ST' in name or '*ST' in name or '退' in name
+from utils.common import is_main_board, is_st_stock
 
 
 def get_main_board_spot() -> pd.DataFrame:

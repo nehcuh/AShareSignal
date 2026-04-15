@@ -11,44 +11,8 @@ from typing import List, Dict, Optional
 import sys
 import tushare as ts
 
-# Tushare token
-TUSHARE_TOKEN = "fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60"
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
-
-
-def is_main_board(ts_code: str) -> bool:
-    """判断是否为主板股票"""
-    code = ts_code.split('.')[0]
-
-    # 科创板
-    if code.startswith('688'):
-        return False
-
-    # 创业板
-    if code.startswith('300') or code.startswith('301'):
-        return False
-
-    # 北交所
-    if code.startswith('8') or code.startswith('430'):
-        return False
-
-    # 主板代码
-    if (code.startswith('000') or code.startswith('001') or
-        code.startswith('002') or code.startswith('003') or
-        code.startswith('600') or code.startswith('601') or
-        code.startswith('603') or code.startswith('605')):
-        return True
-
-    return False
-
-
-def is_st_stock(name: str) -> bool:
-    """判断是否为ST股票"""
-    if not name:
-        return False
-    name = str(name).upper()
-    return 'ST' in name or '*ST' in name or '退' in name
+from config import pro
+from utils.common import is_main_board, is_st_stock
 
 
 def get_today_spot() -> pd.DataFrame:

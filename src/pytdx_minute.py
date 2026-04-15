@@ -73,10 +73,12 @@ class PytdxMinuteManager:
             self.api.disconnect()
             self.api = None
 
-    def _get_cache_path(self, ts_code: str, trade_date: str, freq: str) -> Path:
+    def _get_cache_path(self, ts_code: str, trade_date: str, freq: str, session: str = "morning") -> Path:
         """获取缓存路径"""
         code_clean = ts_code.replace('.', '_')
-        return self.cache_dir / f"{code_clean}_{trade_date}_{freq}min.pkl"
+        if session == "morning":
+            return self.cache_dir / f"{code_clean}_{trade_date}_{freq}min.pkl"
+        return self.cache_dir / f"{code_clean}_{trade_date}_{freq}min_{session}.pkl"
 
     def _ts_code_to_pytdx(self, ts_code: str) -> Tuple[int, str]:
         """
@@ -96,7 +98,8 @@ class PytdxMinuteManager:
         ts_code: str,
         trade_date: str,
         freq: str = "5",
-        use_cache: bool = True
+        use_cache: bool = True,
+        session: str = "morning"
     ) -> Optional[pd.DataFrame]:
         """
         下载指定日期的分钟数据
@@ -106,15 +109,43 @@ class PytdxMinuteManager:
             trade_date: 交易日期 (YYYYMMDD)
             freq: 分钟频率 ("1", "5", "15", "30", "60")
             use_cache: 是否使用缓存
+            session: 交易时段 ("morning", "afternoon", "full")
 
         Returns:
             包含分钟数据的 DataFrame
         """
         # 检查缓存
-        cache_path = self._get_cache_path(ts_code, trade_date, freq)
+        cache_path = self._get_cache_path(ts_code, trade_date, freq, session)
         if use_cache and cache_path.exists():
             with open(cache_path, 'rb') as f:
                 return pickle.load(f)
+
+        # 如果请求 morning/afternoon，尝试从 full 缓存中提取
+        if use_cache and session in ("morning", "afternoon"):
+            full_path = self._get_cache_path(ts_code, trade_date, freq, "full")
+            if full_path.exists():
+                with open(full_path, 'rb') as f:
+                    full_df = pickle.load(f)
+                if session == "morning":
+                    result_df = full_df[
+                        (full_df['time'] >= time(9, 30)) &
+                        (full_df['time'] <= time(11, 30))
+                    ].copy()
+                    if len(result_df) > 0:
+                        result_df['pre_close'] = result_df['open'].iloc[0]
+                        with open(cache_path, 'wb') as f:
+                            pickle.dump(result_df, f)
+                        return result_df
+                elif session == "afternoon":
+                    result_df = full_df[
+                        (full_df['time'] >= time(13, 0)) &
+                        (full_df['time'] <= time(15, 0))
+                    ].copy()
+                    if len(result_df) > 0:
+                        result_df['pre_close'] = result_df['open'].iloc[0]
+                        with open(cache_path, 'wb') as f:
+                            pickle.dump(result_df, f)
+                        return result_df
 
         # 连接服务器
         if not self.connect():
@@ -125,7 +156,7 @@ class PytdxMinuteManager:
             market, code = self._ts_code_to_pytdx(ts_code)
             period = PERIOD_MAP.get(freq, 0)
 
-            print(f"  从 pytdx 获取 {ts_code} {trade_date} {freq}分钟数据...")
+            print(f"  从 pytdx 获取 {ts_code} {trade_date} {freq}分钟 {session} 数据...")
 
             # 获取数据（获取较多数据以确保覆盖目标日期）
             data = self.api.get_security_bars(period, market, code, 0, 800)
@@ -150,27 +181,54 @@ class PytdxMinuteManager:
                 print(f"    无 {trade_date} 的数据")
                 return None
 
-            # 筛选上午交易时间
-            morning_df = df[
-                (df['time'] >= time(9, 30)) &
-                (df['time'] <= time(11, 30))
-            ].copy()
+            result_df = None
 
-            if len(morning_df) == 0:
-                print(f"    无上午交易数据")
+            if session == "morning":
+                result_df = df[
+                    (df['time'] >= time(9, 30)) &
+                    (df['time'] <= time(11, 30))
+                ].copy()
+                if len(result_df) == 0:
+                    print(f"    无上午交易数据")
+                    return None
+                result_df['pre_close'] = result_df['open'].iloc[0]
+                print(f"    成功获取 {len(result_df)} 条上午记录")
+
+            elif session == "afternoon":
+                result_df = df[
+                    (df['time'] >= time(13, 0)) &
+                    (df['time'] <= time(15, 0))
+                ].copy()
+                if len(result_df) == 0:
+                    print(f"    无下午交易数据")
+                    return None
+                # 下午开盘价作为 pre_close 代理
+                result_df['pre_close'] = result_df['open'].iloc[0]
+                print(f"    成功获取 {len(result_df)} 条下午记录")
+
+            elif session == "full":
+                result_df = df[
+                    (
+                        ((df['time'] >= time(9, 30)) & (df['time'] <= time(11, 30))) |
+                        ((df['time'] >= time(13, 0)) & (df['time'] <= time(15, 0)))
+                    )
+                ].copy()
+                if len(result_df) == 0:
+                    print(f"    无交易数据")
+                    return None
+                result_df['pre_close'] = result_df['open'].iloc[0]
+                print(f"    成功获取 {len(result_df)} 条全日记录")
+
+            else:
+                print(f"    未知的 session: {session}")
                 return None
 
-            # 计算前收盘价（用第一根K线的open近似）
-            morning_df['pre_close'] = morning_df['open'].iloc[0]
-
-            print(f"    成功获取 {len(morning_df)} 条上午记录")
-
             # 保存缓存
-            if use_cache:
+            if use_cache and result_df is not None:
                 with open(cache_path, 'wb') as f:
-                    pickle.dump(morning_df, f)
+                    pickle.dump(result_df, f)
 
-            return morning_df
+            return result_df
 
         except Exception as e:
             print(f"    获取失败: {e}")

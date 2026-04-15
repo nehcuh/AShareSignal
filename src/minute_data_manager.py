@@ -14,9 +14,7 @@ import json
 import pickle
 import time
 
-TUSHARE_TOKEN = "fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60"
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
+from config import pro
 
 
 class MinuteDataCache:

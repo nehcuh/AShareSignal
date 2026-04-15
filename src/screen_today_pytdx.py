@@ -15,38 +15,8 @@ sys.path.append(str(Path(__file__).parent))
 
 from pytdx_minute import PytdxMinuteManager
 
-# Tushare token (用于获取股票列表)
-TUSHARE_TOKEN = "fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60"
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
-
-
-def is_main_board(ts_code: str) -> bool:
-    """判断是否为主板股票"""
-    code = ts_code.split('.')[0]
-
-    if code.startswith('688'):
-        return False
-    if code.startswith('300') or code.startswith('301'):
-        return False
-    if code.startswith('8') or code.startswith('430'):
-        return False
-
-    if (code.startswith('000') or code.startswith('001') or
-        code.startswith('002') or code.startswith('003') or
-        code.startswith('600') or code.startswith('601') or
-        code.startswith('603') or code.startswith('605')):
-        return True
-
-    return False
-
-
-def is_st_stock(name: str) -> bool:
-    """判断是否为ST股票"""
-    if not name:
-        return False
-    name = str(name).upper()
-    return 'ST' in name or '*ST' in name or '退' in name
+from config import pro
+from utils.common import is_main_board, is_st_stock
 
 
 def get_main_board_stock_list() -> pd.DataFrame:
@@ -138,6 +108,12 @@ def extract_morning_features(minute_df: pd.DataFrame, today_str: str = None) -> 
     total_vol = morning_df['vol'].sum() if 'vol' in morning_df.columns else morning_df['volume'].sum()
     amplitude = ((high - low) / pre_close * 100) if pre_close > 0 else 0
 
+    # 最后1根K线 (11:25-11:30) 的5分钟收益
+    last_bar = morning_df.iloc[-1]
+    last_open = float(last_bar['open'])
+    last_close = float(last_bar['close'])
+    last_5m_return = ((last_close - last_open) / last_open * 100) if last_open > 0 else 0
+
     return {
         'morning_gap_pct': round(morning_gap_pct, 4),
         'morning_return': round(morning_return, 4),
@@ -151,6 +127,7 @@ def extract_morning_features(minute_df: pd.DataFrame, today_str: str = None) -> 
         'open_price': open_price,
         'morning_vol': total_vol,
         'amplitude': round(amplitude, 4),
+        'last_5m_return': round(last_5m_return, 4),
     }
 
 
@@ -214,6 +191,48 @@ def apply_screening_strategy(features_df: pd.DataFrame) -> pd.DataFrame:
     df['signals'] = df['signals'].str.rstrip('|')
 
     return df.sort_values('score', ascending=False)
+
+
+def apply_pre_veto(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    应用 13:00 前可知的 Pre-Veto 规则
+    Experiment 05 结论：上午最后 5 分钟跌幅超 0.5% 则禁买
+    """
+    df = df.copy()
+    df['veto'] = False
+    df['veto_reason'] = ''
+
+    # Pre-Veto_B: last_5m_return < -0.5%
+    mask = df['last_5m_return'] < -0.5
+    df.loc[mask, 'veto'] = True
+    df.loc[mask, 'veto_reason'] = 'last_5m_return<-0.5%'
+
+    return df
+
+
+def build_top5_recommendation(df: pd.DataFrame, max_positions: int = 5) -> pd.DataFrame:
+    """
+    从筛选结果中生成最终 Top 5 推荐
+    条件：A/B 评级、未被 veto、按 score 排序
+    """
+    # 只取 A/B 级且未 veto
+    candidates = df[
+        (df['rating'].str.startswith(('A', 'B'))) &
+        (~df['veto'])
+    ].copy()
+
+    if len(candidates) == 0:
+        return pd.DataFrame()
+
+    # 取 Top N
+    top = candidates.head(max_positions).copy()
+
+    # 添加交易计划字段
+    top['plan_entry_time'] = '13:00'
+    top['plan_entry_price'] = 'pm_open'
+    top['plan_exit_rule'] = 'T+1 回撤超3%止损，否则收盘卖出'
+
+    return top
 
 
 def screen_today_with_pytdx(max_stocks: int = 200):
@@ -295,6 +314,10 @@ def screen_today_with_pytdx(max_stocks: int = 200):
 
     features_df = pd.DataFrame(all_features)
     result_df = apply_screening_strategy(features_df)
+    result_df = apply_pre_veto(result_df)
+
+    # 生成最终 Top 5 推荐
+    top5 = build_top5_recommendation(result_df, max_positions=5)
 
     print("\n" + "="*80)
     print("筛选结果")
@@ -306,27 +329,40 @@ def screen_today_with_pytdx(max_stocks: int = 200):
         count = rating_counts.get(rating, 0)
         print(f"  {rating}: {count} 只")
 
-    recommended = result_df[result_df['rating'].str.startswith(('A', 'B'))]
+    vetoed = result_df[result_df['veto'] == True]
+    if len(vetoed) > 0:
+        print(f"\n【Pre-Veto 过滤】({len(vetoed)} 只)")
+        for idx, row in vetoed.iterrows():
+            print(f"  {row['ts_code']} {row['name']} — {row['veto_reason']} (score={row['score']})")
 
-    if len(recommended) > 0:
-        print(f"\n【推荐关注股票】({len(recommended)} 只)")
+    if len(top5) > 0:
+        print(f"\n【最终推荐 Top {len(top5)}】")
         print("-"*80)
 
-        for idx, row in recommended.head(20).iterrows():
+        for i, (_, row) in enumerate(top5.iterrows(), 1):
             signals_str = f" [{row['signals']}]" if row['signals'] else ""
-            print(f"\n  {row['ts_code']} {row['name']}")
+            print(f"\n  #{i} {row['ts_code']} {row['name']}")
             print(f"    上午涨幅: {row['morning_return']:+.2f}%  开盘跳空: {row['morning_gap_pct']:+.2f}%")
-            print(f"    最大下探: {row['morning_max_down']:+.2f}%  收盘位置: {row['close_position']:.2f}")
-            print(f"    得分: {row['score']}  评级: {row['rating']}{signals_str}")
+            print(f"    最后5分钟: {row['last_5m_return']:+.2f}%  得分: {row['score']}  评级: {row['rating']}{signals_str}")
+            print(f"    交易计划: {row['plan_entry_time']} {row['plan_entry_price']} 买入 → {row['plan_exit_rule']}")
     else:
-        print("\n【暂无推荐股票】")
+        print("\n【今日无推荐股票】")
 
     output_dir = Path(__file__).parent.parent / "output"
     output_dir.mkdir(exist_ok=True)
 
+    # 保存完整筛选结果
     output_file = output_dir / f"screening_pytdx_{today}.csv"
     result_df.to_csv(output_file, index=False, encoding='utf-8-sig')
     print(f"\n完整结果已保存: {output_file}")
+
+    # 保存最新 Top 5 到 output/latest/
+    latest_dir = output_dir / "latest"
+    latest_dir.mkdir(exist_ok=True)
+    if len(top5) > 0:
+        top5_file = latest_dir / f"top5_{today}.csv"
+        top5.to_csv(top5_file, index=False, encoding='utf-8-sig')
+        print(f"Top 5 推荐已保存: {top5_file}")
 
     return result_df
 

@@ -10,42 +10,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-TUSHARE_TOKEN = "fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60"
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
-
-
-def load_stock_pool(excel_path: str) -> pd.DataFrame:
-    """加载股票池"""
-    df = pd.read_excel(excel_path)
-    df["pool_date"] = pd.to_datetime(df["pool_date"])
-    df["stock_list"] = df["pool_data"].str.split(",")
-    return df
-
-
-def get_trading_days(start_date: str, end_date: str) -> List[str]:
-    """获取交易日列表"""
-    cal = pro.trade_cal(exchange="SSE", start_date=start_date, end_date=end_date)
-    return sorted(cal[cal["is_open"] == 1]["cal_date"].tolist())
-
-
-def get_prev_trading_day(trade_date: str, trading_days: List[str]) -> Optional[str]:
-    """获取前一个交易日"""
-    for i, d in enumerate(trading_days):
-        if d == trade_date and i > 0:
-            return trading_days[i - 1]
-    for d in reversed(trading_days):
-        if d < trade_date:
-            return d
-    return None
-
-
-def get_next_trading_day(trade_date: str, trading_days: List[str]) -> Optional[str]:
-    """获取下一个交易日"""
-    for d in trading_days:
-        if d > trade_date:
-            return d
-    return None
+from config import pro
+from utils.common import get_trading_days, load_stock_pool, get_prev_trading_day, get_next_trading_day
 
 
 def calc_rsi(close: pd.Series, period: int = 6) -> pd.Series:

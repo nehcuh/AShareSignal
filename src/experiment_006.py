@@ -18,9 +18,7 @@ sys.path.append(str(Path(__file__).parent))
 from autoresearch import AutoResearch, DataLoader, FeatureEngineer, BacktestEngine
 
 import tushare as ts
-TUSHARE_TOKEN = "fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60"
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
+from config import pro
 
 
 class AdvancedFeatureEngineer(FeatureEngineer):

@@ -9,11 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from predict_hybrid import HybridMinutePredictor
-import tushare as ts
-
-# 设置 Tushare token
-ts.set_token("fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60")
-pro = ts.pro_api()
+from config import pro
 
 def load_stock_pool():
     """加载所有股票池中的唯一股票"""

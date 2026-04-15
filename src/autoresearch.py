@@ -22,9 +22,8 @@ import json
 import warnings
 warnings.filterwarnings('ignore')
 
-TUSHARE_TOKEN = "fd6cf8fc8404cf6f93ca6091c1e603d9bc3a65f5a536c77dbb882e60"
-ts.set_token(TUSHARE_TOKEN)
-pro = ts.pro_api()
+from config import pro
+from utils.common import load_stock_pool as _common_load_stock_pool, get_trading_days as _common_get_trading_days
 
 
 class ExperimentStatus(Enum):
@@ -94,11 +93,8 @@ class DataLoader:
         if self.stock_pool is not None:
             return self.stock_pool
 
-        df = pd.read_excel(excel_path)
-        df["pool_date"] = pd.to_datetime(df["pool_date"])
-        df["stock_list"] = df["pool_data"].str.split(",")
-        self.stock_pool = df
-        return df
+        self.stock_pool = _common_load_stock_pool(excel_path)
+        return self.stock_pool
 
     def fetch_daily_data(self, ts_codes: List[str], start_date: str, end_date: str) -> pd.DataFrame:
         """获取日线数据"""
@@ -311,14 +307,7 @@ class BacktestEngine:
     def get_trading_days(self, start_date: str, end_date: str) -> List[str]:
         """获取交易日列表"""
         try:
-            cal = pro.trade_cal(exchange="SSE", start_date=start_date, end_date=end_date)
-            if cal is None or len(cal) == 0:
-                print(f"  警告: 无法获取交易日历 {start_date} ~ {end_date}")
-                return []
-            if "is_open" not in cal.columns:
-                print(f"  警告: 交易日历数据格式异常, 列名: {cal.columns.tolist()}")
-                return cal["cal_date"].tolist() if "cal_date" in cal.columns else []
-            return sorted(cal[cal["is_open"] == 1]["cal_date"].tolist())
+            return _common_get_trading_days(start_date, end_date)
         except Exception as e:
             print(f"  获取交易日历失败: {e}")
             return []
