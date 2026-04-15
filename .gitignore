@@ -28,6 +28,8 @@ output/
 # Memory and temporary files
 memory/
 *.log
+failed_dates.txt
+need_process_dates.txt
 
 # Claude Code specific
 .claude/
